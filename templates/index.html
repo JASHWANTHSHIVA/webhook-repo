@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TechStaX – GitHub Event Monitor</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>GitHub Event Monitor</h1>
+    <p class="subtitle">Live feed of Push, Pull Request &amp; Merge events</p>
+    <span id="status-badge" class="badge polling">Polling every 15s...</span>
+  </header>
+
+  <main>
+    <div id="events-container">
+      <p id="loading-msg">Loading events...</p>
+    </div>
+  </main>
+
+  <footer>
+    <p>TechStaX Pvt. Ltd. &mdash; Developer Assessment</p>
+  </footer>
+
+  <script>
+    // Track already displayed request IDs to avoid showing duplicates
+    const displayedIds = new Set();
+
+    /**
+     * Returns a human-readable label string for an event based on its action type.
+     * Formats:
+     *   PUSH:         "{author} pushed to {to_branch} on {timestamp}"
+     *   PULL_REQUEST: "{author} submitted a pull request from {from_branch} to {to_branch} on {timestamp}"
+     *   MERGE:        "{author} merged branch {from_branch} to {to_branch} on {timestamp}"
+     */
+    function formatEventMessage(event) {
+      const { author, action, from_branch, to_branch, timestamp } = event;
+      switch (action) {
+        case "PUSH":
+          return `<strong>${author}</strong> pushed to <span class="branch">${to_branch}</span> on <em>${timestamp}</em>`;
+        case "PULL_REQUEST":
+          return `<strong>${author}</strong> submitted a pull request from <span class="branch">${from_branch}</span> to <span class="branch">${to_branch}</span> on <em>${timestamp}</em>`;
+        case "MERGE":
+          return `<strong>${author}</strong> merged branch <span class="branch">${from_branch}</span> to <span class="branch">${to_branch}</span> on <em>${timestamp}</em>`;
+        default:
+          return `Unknown action: ${action}`;
+      }
+    }
+
+    /**
+     * Returns the CSS class name for an event card based on its action type.
+     */
+    function getActionClass(action) {
+      switch (action) {
+        case "PUSH":         return "event-push";
+        case "PULL_REQUEST": return "event-pr";
+        case "MERGE":        return "event-merge";
+        default:             return "";
+      }
+    }
+
+    /**
+     * Fetches events from /events endpoint and renders only new (not yet displayed) ones.
+     * Skips events whose unique key (request_id + action) has already been displayed.
+     */
+    async function fetchAndRender() {
+      const badge = document.getElementById("status-badge");
+      try {
+        const response = await fetch("/events");
+        if (!response.ok) throw new Error("Network response was not ok");
+
+        const events = await response.json();
+        const container = document.getElementById("events-container");
+        const loadingMsg = document.getElementById("loading-msg");
+
+        // Remove loading message once we get a response
+        if (loadingMsg) loadingMsg.remove();
+
+        // Filter events that haven't been rendered yet
+        const newEvents = events.filter(e => {
+          const uniqueKey = `${e.request_id}__${e.action}`;
+          return !displayedIds.has(uniqueKey);
+        });
+
+        if (newEvents.length === 0 && displayedIds.size === 0) {
+          // No events at all
+          if (!document.getElementById("no-events-msg")) {
+            const msg = document.createElement("p");
+            msg.id = "no-events-msg";
+            msg.className = "no-events";
+            msg.textContent = "No events yet. Push to action-repo to see events here.";
+            container.appendChild(msg);
+          }
+          return;
+        }
+
+        // Remove the "no events" placeholder if new events arrive
+        const noEventsMsg = document.getElementById("no-events-msg");
+        if (noEventsMsg && newEvents.length > 0) noEventsMsg.remove();
+
+        // Render each new event as a card (insert at top)
+        newEvents.forEach(event => {
+          const uniqueKey = `${event.request_id}__${event.action}`;
+          displayedIds.add(uniqueKey);
+
+          const card = document.createElement("div");
+          card.className = `event-card ${getActionClass(event.action)}`;
+
+          const label = document.createElement("span");
+          label.className = "action-label";
+          label.textContent = event.action.replace("_", " ");
+
+          const message = document.createElement("p");
+          message.className = "event-message";
+          message.innerHTML = formatEventMessage(event);
+
+          card.appendChild(label);
+          card.appendChild(message);
+
+          // Insert newest events at the top
+          container.insertBefore(card, container.firstChild);
+        });
+
+        // Update badge to show last updated time
+        const now = new Date().toLocaleTimeString();
+        badge.textContent = `Last updated: ${now} | Next poll in 15s`;
+        badge.className = "badge ok";
+
+      } catch (err) {
+        console.error("Error fetching events:", err);
+        badge.textContent = "Connection error. Retrying...";
+        badge.className = "badge error";
+      }
+    }
+
+    // Initial fetch on page load
+    fetchAndRender();
+
+    // Poll every 15 seconds
+    setInterval(fetchAndRender, 15000);
+  </script>
+
+</body>
+</html>
