@@ -49,7 +49,7 @@ Use [ngrok](https://ngrok.com/) to expose your local server:
 ```bash
 ngrok http 5000
 ```
-Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`) and set it as the `WEBHOOK_URL` secret in your `action-repo`.
+Copy the HTTPS URL (e.g., `https://abc123.ngrok-free.dev`) and set it as the `WEBHOOK_URL` secret in your `action-repo`.
 
 ## Webhook Payload Format (received from action-repo)
 ```json
